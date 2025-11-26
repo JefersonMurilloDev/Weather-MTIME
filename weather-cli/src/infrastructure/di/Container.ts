@@ -26,100 +26,18 @@ const logger: Logger = new ConsoleLogger({
   timestampFormat: 'iso'
 });
 
-/**
- * Interfaz para servicios de validación (serán implementados más adelante)
- */
-interface CityValidatorService {
-  validateCityName(name: string): boolean;
-  validateCountryCode(code: string): boolean;
-  normalizeCityName(name: string): string;
-}
+import { CityValidatorService, SimpleCityValidator } from '@infrastructure/validation/CityValidator';
+import { CountryValidatorService, SimpleCountryValidator } from '@infrastructure/validation/CountryValidator';
 
-interface CountryValidatorService {
-  validateCountryCode(code: string): boolean;
-  normalizeCountryCode(code: string): string;
-  getCountryName(code: string): string;
-}
+import { CacheService } from '@domain/services/CacheService';
+import { MemoryCacheAdapter } from '@infrastructure/cache/MemoryCacheAdapter';
+import { WeatherCacheAdapter, WeatherCacheService } from '@infrastructure/cache/WeatherCacheAdapter';
 
-interface WeatherCacheService {
-  get(key: string): Promise<any | null>;
-  set(key: string, value: any): Promise<void>;
-  generateKey(country: string, limit: number): string;
-}
-
-/**
- * Implementaciones temporales de validators
- */
-class SimpleCityValidator implements CityValidatorService {
-  validateCityName(name: string): boolean {
-    return name.length >= 2 && /^[a-zA-Z\s\-']+$/.test(name);
-  }
-
-  validateCountryCode(code: string): boolean {
-    // Validar códigos ISO 2 letras
-    return code.length === 2 && /^[A-Z]{2}$/.test(code);
-  }
-
-  normalizeCityName(name: string): string {
-    return name.trim().replace(/\s+/g, ' ');
-  }
-}
-
-class SimpleCountryValidator implements CountryValidatorService {
-  private readonly isoCodes = new Set(['ES', 'US', 'MX', 'AR', 'CO', 'PE', 'CL', 'BR', 'FR', 'DE', 'IT', 'PT']);
-
-  validateCountryCode(code: string): boolean {
-    return this.isoCodes.has(code.toUpperCase());
-  }
-
-  normalizeCountryCode(code: string): string {
-    return code.toUpperCase().trim();
-  }
-
-  getCountryName(code: string): string {
-    const names: Record<string, string> = {
-      'ES': 'España',
-      'US': 'Estados Unidos',
-      'MX': 'México',
-      'AR': 'Argentina',
-      'CO': 'Colombia',
-      'PE': 'Perú',
-      'CL': 'Chile',
-      'BR': 'Brasil',
-      'FR': 'Francia',
-      'DE': 'Alemania',
-      'IT': 'Italia',
-      'PT': 'Portugal'
-    };
-
-    return names[code] || code;
-  }
-}
-
-class InMemoryCache implements WeatherCacheService {
-  private cache = new Map<string, any>();
-
-  async get(key: string): Promise<any | null> {
-    return this.cache.get(key) || null;
-  }
-
-  async set(key: string, value: any): Promise<void> {
-    this.cache.set(key, value);
-
-    // Limitar el tamaño del cache
-    if (this.cache.size > 100) {
-      // Eliminar el entry más antiguo
-      const iterator = this.cache.keys().next();
-      if (!iterator.done) {
-        this.cache.delete(iterator.value);
-      }
-    }
-  }
-
-  generateKey(country: string, limit: number): string {
-    return `country:${country}:${limit}`;
-  }
-}
+// MongoDB
+import { HistoryRepository } from '@domain/repositories/HistoryRepository';
+import { MongoConnection } from '@infrastructure/database/MongoConnection';
+import { MongoHistoryRepository } from '@infrastructure/repositories/MongoHistoryRepository';
+import { HistoryService } from '@application/services/HistoryService';
 
 /**
  * Configura el container de dependencias
@@ -171,12 +89,51 @@ export function configureContainer(): void {
   );
 
   // 5. Registrar servicios de cache
-  container.registerSingleton<WeatherCacheService>(
-    'WeatherCacheService',
-    InMemoryCache,
+  container.registerSingleton<CacheService>(
+    'CacheService',
+    MemoryCacheAdapter,
   );
 
-  // 6. Registrar Casos de Uso (constructor injection con @inject)
+  // 6. Registrar servicio de caché específico para clima por país
+  container.registerSingleton<WeatherCacheService>(
+    'WeatherCacheService',
+    WeatherCacheAdapter,
+  );
+
+  // 7. Registrar MongoDB (solo si está habilitado)
+  if (appConfig.mongodb.enabled) {
+    logger.debug('🔄 MongoDB habilitado, registrando conexión...');
+    
+    const mongoConnection = MongoConnection.getInstance({
+      uri: appConfig.mongodb.uri,
+      maxPoolSize: appConfig.mongodb.maxPoolSize,
+      connectTimeoutMS: appConfig.mongodb.connectTimeoutMS,
+    });
+
+    container.registerInstance('MongoConnection', mongoConnection);
+
+    container.registerSingleton<HistoryRepository>(
+      'HistoryRepository',
+      MongoHistoryRepository,
+    );
+
+    // Registrar servicio de historial
+    container.registerSingleton<HistoryService>(
+      'HistoryService',
+      HistoryService,
+    );
+
+    // Pre-conectar a MongoDB en background (no bloquea)
+    mongoConnection.connect().catch((err) => {
+      logger.warn('No se pudo pre-conectar a MongoDB:', err);
+    });
+
+    logger.debug('✅ MongoDB configurado');
+  } else {
+    logger.debug('MongoDB deshabilitado, usando historial en archivo');
+  }
+
+  // 8. Registrar Casos de Uso (constructor injection con @inject)
   container.registerSingleton(GetWeatherByCityUseCase, GetWeatherByCityUseCase);
   container.registerSingleton(GetWeatherByCountryUseCase, GetWeatherByCountryUseCase);
 

@@ -8,7 +8,8 @@ import { GetWeatherByCountryRequestDTO } from '@application';
 import { isOk, isErr } from '@shared';
 import { logger } from '@infrastructure/logger/Logger';
 import { appConfig } from '@infrastructure/config/Config';
-import { getUseCase } from '@infrastructure/di/Container';
+import { getUseCase, getDependency } from '@infrastructure/di/Container';
+import { HistoryService } from '@application/services/HistoryService';
 import { colors, icons, errorMessage, successMessage, separator } from '../colors';
 
 /**
@@ -79,6 +80,20 @@ class CountryWeatherFormatter {
 }
 
 /**
+ * Obtiene el servicio de historial si MongoDB está habilitado
+ */
+function getHistoryService(): HistoryService | null {
+  if (appConfig.mongodb.enabled) {
+    try {
+      return getDependency<HistoryService>('HistoryService');
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
  * Crea el comando para obtener clima por país
  */
 export function createCountryCommand(): Command {
@@ -132,6 +147,25 @@ export function createCountryCommand(): Command {
         if (isOk(result)) {
           console.log(formatter.format(result.value));
           console.log(successMessage('✅ Datos obtenidos exitosamente'));
+
+          // Guardar en historial (fire-and-forget)
+          const historyService = getHistoryService();
+          if (historyService) {
+            result.value.cities.forEach((cityWeather: any) => {
+              setImmediate(() => {
+                historyService.save({
+                  searchQuery: `${country} (país)`,
+                  cityName: cityWeather.city,
+                  countryCode: cityWeather.country, // Usar el código ISO de cada ciudad
+                  temperature: cityWeather.temperature,
+                  feelsLike: cityWeather.feelsLike,
+                  humidity: cityWeather.humidity,
+                  condition: cityWeather.condition,
+                  description: cityWeather.description,
+                }).catch((err) => logger.debug('Error guardando historial:', err));
+              });
+            });
+          }
         } else if (isErr(result)) {
           const error = result.error;
 

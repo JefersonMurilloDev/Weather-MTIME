@@ -31,3 +31,11 @@ Thumbs.db
 # Lock files (descomentar si prefieres no trackearlos)
 # package-lock.json
 # yarn.lock
+
+# MongoDB data (Docker volume)
+mongo/
+
+# Archivos temporales
+output.txt
+test_output.txt
+*.md.bak

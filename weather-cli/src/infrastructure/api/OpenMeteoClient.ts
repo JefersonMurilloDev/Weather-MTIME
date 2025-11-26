@@ -175,10 +175,92 @@ export class OpenMeteoClient {
     return adapted;
   }
 
-  async getCitiesByCountry(): Promise<WeatherApiType[]> {
-    // Implementación mínima para no romper la interfaz; se podría
-    // ampliar si quieres soporte real por país.
-    return [];
+  /**
+   * Busca ciudades por país y obtiene su clima
+   * Usa la API de geocoding de Open-Meteo para búsqueda dinámica
+   */
+  async getCitiesByCountry(
+    countryCode: string,
+    limit: number = 5,
+  ): Promise<WeatherApiType[]> {
+    console.info(`Buscando ciudades en país: ${countryCode} (límite: ${limit})`);
+
+    try {
+      // Buscar ciudades del país usando geocoding
+      const cities = await this.searchCitiesByCountry(countryCode, limit);
+      
+      const results: WeatherApiType[] = [];
+      
+      for (const city of cities) {
+        try {
+          const weather = await this.getCurrentWeatherByCoordinates(
+            city.lat,
+            city.lon,
+            "metric",
+          );
+          // Actualizar el nombre de la ciudad en la respuesta
+          weather.name = city.name;
+          weather.sys.country = city.country;
+          results.push(weather);
+        } catch (error) {
+          console.warn(`Error obteniendo clima para ${city.name}:`, error);
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error(`Error al consultar país ${countryCode}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Busca ciudades por país usando la API de geocoding de Open-Meteo
+   */
+  private async searchCitiesByCountry(
+    countryCode: string,
+    limit: number,
+  ): Promise<Array<{ name: string; lat: number; lon: number; country: string }>> {
+    // Mapa de capitales como punto de partida para búsqueda
+    const capitals: Record<string, string> = {
+      ES: "Madrid", US: "New York", MX: "Mexico City", AR: "Buenos Aires",
+      CO: "Bogota", PE: "Lima", CL: "Santiago", VE: "Caracas",
+      EC: "Quito", BR: "Sao Paulo", FR: "Paris", DE: "Berlin",
+      IT: "Rome", GB: "London", PT: "Lisbon", JP: "Tokyo",
+      CN: "Beijing", IN: "Mumbai", AU: "Sydney", CA: "Toronto",
+      RU: "Moscow", KR: "Seoul", NL: "Amsterdam", BE: "Brussels",
+    };
+
+    const searchCity = capitals[countryCode.toUpperCase()] || countryCode;
+
+    try {
+      const response = await this.geoClient.get("/search", {
+        params: {
+          name: searchCity,
+          count: limit,
+          language: "es",
+          format: "json",
+        },
+      });
+
+      const results = response.data?.results as
+        | Array<{ latitude: number; longitude: number; name: string; country_code?: string }>
+        | undefined;
+
+      if (!results || results.length === 0) {
+        throw new Error(`No se encontraron ciudades para ${countryCode}`);
+      }
+
+      return results.map((r) => ({
+        name: r.name,
+        lat: r.latitude,
+        lon: r.longitude,
+        country: r.country_code || countryCode,
+      }));
+    } catch (error) {
+      console.error(`Error buscando ciudades en ${countryCode}:`, error);
+      throw error;
+    }
   }
 
   private async resolveCoordinates(

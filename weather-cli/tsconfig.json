@@ -2,9 +2,10 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "commonjs",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "outDir": "./dist",
-    "rootDir": "./src",
     "strict": true,
     "strictNullChecks": true,
     "strictFunctionTypes": true,
@@ -36,14 +37,30 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": "./",
     "paths": {
-      "@domain/*": ["src/domain/*"],
-      "@application": ["src/application/index.ts"],
-      "@application/*": ["src/application/*"],
-      "@infrastructure/*": ["src/infrastructure/*"],
-      "@presentation/*": ["src/presentation/*"],
-      "@shared": ["src/shared/index.ts"],
-      "@shared/*": ["src/shared/*"],
-      "@/*": ["src/*"]
+      "@domain/*": [
+        "src/domain/*"
+      ],
+      "@application": [
+        "src/application/index.ts"
+      ],
+      "@application/*": [
+        "src/application/*"
+      ],
+      "@infrastructure/*": [
+        "src/infrastructure/*"
+      ],
+      "@presentation/*": [
+        "src/presentation/*"
+      ],
+      "@shared": [
+        "src/shared/index.ts"
+      ],
+      "@shared/*": [
+        "src/shared/*"
+      ],
+      "@/*": [
+        "src/*"
+      ]
     }
   },
   "ts-node": {
@@ -54,6 +71,12 @@
       "module": "commonjs"
     }
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests/**/*.test.ts", "**/*.spec.ts"]
+  "include": [
+    "src/**/*",
+    "tests/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
 }

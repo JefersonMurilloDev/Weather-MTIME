@@ -14,8 +14,9 @@ import {
   errorMessage,
   separator,
 } from "../colors";
-import { getUseCase } from "@infrastructure/di/Container";
+import { getUseCase, getDependency } from "@infrastructure/di/Container";
 import { HistoryManager } from "./history-command";
+import { HistoryService } from "@application/services/HistoryService";
 
 /**
  * Clase para formatear datos de clima en output visual
@@ -125,6 +126,18 @@ class ConsoleWeatherFormatter {
 export function createWeatherCommand(): Command {
   const formatter = new ConsoleWeatherFormatter();
   const historyManager = new HistoryManager();
+  
+  // Obtener servicio de historial MongoDB si está habilitado
+  const getHistoryService = (): HistoryService | null => {
+    if (appConfig.mongodb.enabled) {
+      try {
+        return getDependency<HistoryService>('HistoryService');
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  };
 
   return new Command("get")
     .description("Obtiene el clima actual de una ciudad")
@@ -203,13 +216,31 @@ export function createWeatherCommand(): Command {
           // Éxito - Mostrar resultado
           const weatherData = result.value.weather;
 
-          // Registrar en historial (en memoria por ahora)
-          historyManager.logSearch(
-            location,
-            result.value.city.name,
-            result.value.city.country,
-            weatherData.temperature,
-          );
+          // Registrar en historial (fire-and-forget para no bloquear)
+          const historyService = getHistoryService();
+          if (historyService) {
+            // Usar MongoDB - no esperamos la respuesta
+            setImmediate(() => {
+              historyService.save({
+                searchQuery: location,
+                cityName: result.value.city.name,
+                countryCode: result.value.city.country,
+                temperature: weatherData.temperature,
+                feelsLike: weatherData.feelsLike,
+                humidity: weatherData.humidity,
+                condition: weatherData.condition,
+                description: weatherData.description,
+              }).catch((err) => logger.debug('Error guardando en MongoDB:', err));
+            });
+          } else {
+            // Fallback a archivo local
+            historyManager.logSearch(
+              location,
+              result.value.city.name,
+              result.value.city.country,
+              weatherData.temperature,
+            );
+          }
           const responseDTO: WeatherResponseDTO = {
             city: result.value.city.name,
             country: result.value.city.country,

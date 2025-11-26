@@ -14,7 +14,7 @@ import { LogLevelString } from '@infrastructure/logger/Logger';
 const ConfigSchema = z.object({
   // Configuración del API
   weatherApi: z.object({
-    key: z.string().min(10, 'La API key debe tener al menos 10 caracteres'),
+    key: z.string().optional(), // Hacemos opcional aquí, validaremos según provider
     baseUrl: z.string().url('Debe ser una URL válida').default('https://api.openweathermap.org/data/2.5'),
     timeout: z.number().int().positive().default(5000),
     maxRetries: z.number().int().min(0).max(5).default(3),
@@ -44,6 +44,14 @@ const ConfigSchema = z.object({
     maxEntries: z.number().int().positive().default(100)
   }),
 
+  // Configuración de MongoDB
+  mongodb: z.object({
+    enabled: z.boolean().default(false),
+    uri: z.string().default('mongodb://localhost:27017/weathercli'),
+    maxPoolSize: z.number().int().positive().default(10),
+    connectTimeoutMS: z.number().int().positive().default(5000)
+  }),
+
   // Configuración general
   app: z.object({
     nodeEnv: z.enum(['development', 'test', 'production']).default('development'),
@@ -71,6 +79,11 @@ export class AppConfig {
     try {
       // Validar y parsear la configuración
       this.config = ConfigSchema.parse(rawConfig);
+
+      // Validación adicional: API Key requerida solo para OpenWeather
+      if (this.config.app.provider === 'openweather' && (!this.config.weatherApi.key || this.config.weatherApi.key.length < 10)) {
+        throw new Error('La API key de OpenWeatherMap es requerida y debe tener al menos 10 caracteres cuando se usa el proveedor "openweather".');
+      }
 
       // Verificar si estamos en modo desarrollo
       if (this.isDevelopment()) {
@@ -139,6 +152,12 @@ export class AppConfig {
         ttlSeconds: parseInt(process.env["CACHE_TTL_SECONDS"] || '600', 10),
         maxEntries: parseInt(process.env["CACHE_MAX_ENTRIES"] || '100', 10)
       },
+      mongodb: {
+        enabled: process.env["MONGO_ENABLED"] === 'true',
+        uri: this.buildMongoUri(),
+        maxPoolSize: parseInt(process.env["MONGO_POOL_SIZE"] || '10', 10),
+        connectTimeoutMS: parseInt(process.env["MONGO_TIMEOUT"] || '5000', 10)
+      },
       app: {
         nodeEnv: process.env["NODE_ENV"],
         version: process.env["npm_package_version"] || '1.0.0',
@@ -165,8 +184,31 @@ export class AppConfig {
     return this.config.cache;
   }
 
+  get mongodb() {
+    return this.config.mongodb;
+  }
+
   get app() {
     return this.config.app;
+  }
+
+  /**
+   * Construye la URI de MongoDB desde variables de entorno
+   */
+  private buildMongoUri(): string {
+    const url = process.env["MONGO_URL"];
+    if (url) return url;
+
+    const user = process.env["MONGO_USER"];
+    const pass = process.env["MONGO_PASS"];
+    const host = process.env["MONGO_HOST"] || 'localhost';
+    const port = process.env["MONGO_PORT"] || '27017';
+    const dbName = process.env["MONGO_DB_NAME"] || 'weathercli';
+
+    if (user && pass) {
+      return `mongodb://${user}:${pass}@${host}:${port}/${dbName}`;
+    }
+    return `mongodb://${host}:${port}/${dbName}`;
   }
 
   /**

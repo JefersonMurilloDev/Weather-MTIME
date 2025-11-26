@@ -113,41 +113,6 @@ export const icons = {
 };
 
 /**
- * Helper para crear texto enriquecido
- */
-export function styled(text: string, styles: ColorName[]): string {
-  if (!supportsColor()) {
-    return text;
-  }
-
-  const codes = styles.map(style => ANSI_CODES[style]).join('');
-  return `${codes}${text}${ANSI_CODES.reset}`;
-}
-
-/**
- * Función para crear barras de progreso simples
- */
-export function progressBar(current: number, total: number, length: number = 20): string {
-  const percentage = Math.min(100, Math.max(0, (current / total) * 100));
-  const filled = Math.round((length * percentage) / 100);
-  const empty = length - filled;
-
-  const bar = '█'.repeat(filled) + '\u2591'.repeat(empty);
-
-  if (supportsColor()) {
-    if (percentage < 33) {
-      return colors.red(bar);
-    } else if (percentage < 66) {
-      return colors.yellow(bar);
-    } else {
-      return colors.green(bar);
-    }
-  }
-
-  return bar;
-}
-
-/**
  * Crea un separador visual
  */
 export function separator(char: string = '─', length: number = 40): string {
@@ -179,13 +144,4 @@ export function successMessage(message: string): string {
  */
 export function warningMessage(message: string): string {
   return colors.yellow(`${icons.warning} ${message}`);
-}
-
-/**
- * Función para limpiar colores de un texto (útil para tests)
- */
-export function stripColors(text: string): string {
-  // Regex para eliminar códigos ANSI
-  const ansiRegex = /\x1b\[[0-9;]*m/g;
-  return text.replace(ansiRegex, '');
 }

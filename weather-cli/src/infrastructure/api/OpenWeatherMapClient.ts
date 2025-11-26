@@ -117,7 +117,99 @@ export class OpenWeatherMapClient {
   }
 
   /**
+   * Busca ciudades por país usando la API de geocoding
+   * Retorna una lista de ciudades con sus coordenadas
+   */
+  async searchCitiesByCountry(
+    countryCode: string,
+    limit: number = 5,
+  ): Promise<Array<{ name: string; lat: number; lon: number; country: string }>> {
+    this.logger.info(
+      `Buscando ciudades en país: ${countryCode} (límite: ${limit})`,
+    );
+
+    try {
+      // Usar reverse geocoding con coordenadas del centro del país
+      // o buscar ciudades populares del país
+      const response = await this.geoClient.get("/geo/1.0/direct", {
+        params: {
+          q: `,${countryCode.toUpperCase()}`, // Buscar por código de país
+          limit: Math.min(limit, 5), // API limita a 5 resultados por consulta
+        },
+      });
+
+      const results = response.data as Array<{
+        name: string;
+        lat: number;
+        lon: number;
+        country: string;
+        state?: string;
+      }>;
+
+      if (!results || results.length === 0) {
+        // Fallback: buscar la capital o ciudad principal
+        return this.searchCapitalCity(countryCode);
+      }
+
+      return results.map((r) => ({
+        name: r.name,
+        lat: r.lat,
+        lon: r.lon,
+        country: r.country,
+      }));
+    } catch (error) {
+      this.logger.error(`Error buscando ciudades en ${countryCode}:`, error);
+      throw this.handleAPIError(error);
+    }
+  }
+
+  /**
+   * Busca la capital o ciudades principales de un país
+   * Usa una búsqueda más amplia con nombres de ciudades conocidas
+   */
+  private async searchCapitalCity(
+    countryCode: string,
+  ): Promise<Array<{ name: string; lat: number; lon: number; country: string }>> {
+    // Mapa de capitales por código de país (fallback)
+    const capitals: Record<string, string> = {
+      ES: "Madrid", US: "Washington", MX: "Mexico City", AR: "Buenos Aires",
+      CO: "Bogota", PE: "Lima", CL: "Santiago", VE: "Caracas",
+      EC: "Quito", BR: "Brasilia", FR: "Paris", DE: "Berlin",
+      IT: "Rome", GB: "London", PT: "Lisbon", JP: "Tokyo",
+      CN: "Beijing", IN: "New Delhi", AU: "Canberra", CA: "Ottawa",
+      RU: "Moscow", KR: "Seoul", NL: "Amsterdam", BE: "Brussels",
+      CH: "Bern", AT: "Vienna", PL: "Warsaw", SE: "Stockholm",
+      NO: "Oslo", DK: "Copenhagen", FI: "Helsinki", IE: "Dublin",
+      GR: "Athens", TR: "Ankara", EG: "Cairo", ZA: "Pretoria",
+      NG: "Abuja", KE: "Nairobi", MA: "Rabat", TH: "Bangkok",
+      VN: "Hanoi", PH: "Manila", ID: "Jakarta", MY: "Kuala Lumpur",
+      SG: "Singapore", NZ: "Wellington", CU: "Havana", CR: "San Jose",
+      PA: "Panama City", GT: "Guatemala City", HN: "Tegucigalpa",
+      SV: "San Salvador", NI: "Managua", DO: "Santo Domingo",
+      PR: "San Juan", UY: "Montevideo", PY: "Asuncion", BO: "La Paz",
+    };
+
+    const capital = capitals[countryCode.toUpperCase()];
+    if (capital) {
+      const coords = await this.resolveCoordinates(capital, countryCode);
+      return [{
+        name: coords.name,
+        lat: coords.lat,
+        lon: coords.lon,
+        country: coords.country || countryCode,
+      }];
+    }
+
+    throw new ApiError(
+      `No se encontraron ciudades para el país ${countryCode}`,
+      "OpenWeatherMap",
+      404,
+    );
+  }
+
+  /**
    * Obtiene el clima para múltiples ciudades por país
+   * Usa búsqueda dinámica de ciudades
    */
   async getCitiesByCountry(
     countryCode: string,
@@ -127,28 +219,28 @@ export class OpenWeatherMapClient {
       `Consultando clima para ${limit} ciudades en país: ${countryCode}`,
     );
 
-    // Debido a que OpenWeatherMap API no tiene un endpoint directo para obtener
-    // el clima de múltiples ciudades por país, implementamos una alternativa:
     try {
-      const response = await this.client.get("/find", {
-        params: {
-          q: countryCode,
-          type: "like",
-          sort: "population",
-          cnt: limit,
-          units: "metric",
-        },
-      });
-
-      // Si el endpoint devuelve una lista de ciudades
-      if (response.data && response.data.list) {
-        return response.data.list.map((item: any) =>
-          parseWeatherResponse(item),
-        );
+      // Primero buscar ciudades del país
+      const cities = await this.searchCitiesByCountry(countryCode, limit);
+      
+      // Luego obtener el clima de cada ciudad
+      const weatherResults: WeatherResponseType[] = [];
+      
+      for (const city of cities) {
+        try {
+          const weather = await this.getCurrentWeatherByCoordinates(
+            city.lat,
+            city.lon,
+            "metric",
+          );
+          weatherResults.push(weather);
+        } catch (error) {
+          this.logger.warn(`Error obteniendo clima para ${city.name}:`, error);
+          // Continuar con las demás ciudades
+        }
       }
 
-      // Si es una sola ciudad, devolver como array
-      return [parseWeatherResponse(response.data)];
+      return weatherResults;
     } catch (error) {
       this.logger.error(`Error al consultar país ${countryCode}:`, error);
       throw this.handleAPIError(error);

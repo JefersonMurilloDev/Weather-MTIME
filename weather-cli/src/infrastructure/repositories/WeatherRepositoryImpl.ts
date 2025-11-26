@@ -14,6 +14,7 @@ import {
   TemperatureUnit,
   Coordinates
 } from '@domain/index';
+import { CacheService } from '@domain/services/CacheService';
 import { Type } from '@infrastructure/api/WeatherAPIResponse';
 import {
   NotFoundError,
@@ -22,11 +23,12 @@ import {
 } from '@shared';
 import { Logger } from '@infrastructure/logger/Logger';
 import { ApplicationError } from '@shared/errors';
+import { getCitiesForCountry } from '@infrastructure/data/CitiesByCountry';
 
 /**
  * Interfaz para el cliente HTTP de la API de clima
  */
-interface WeatherAPIClient {
+export interface WeatherAPIClient {
   getCurrentWeatherByCityName(
     cityName: string,
     countryCode?: string,
@@ -69,18 +71,6 @@ const API_CONDITION_TO_DOMAIN: Record<string, WeatherCondition> = {
   'Haze': WeatherCondition.HAZE
 };
 
-/**
- * Ciudades principales por país (ISO-2) para consultas por país
- * Se puede ampliar fácilmente según necesidad.
- */
-const TOP_CITIES_BY_COUNTRY: Record<string, string[]> = {
-  ES: ["Girona", "Salamanca", "Valencia", "Sevilla", "Bilbao"],
-  US: ["New York", "Los Angeles", "Chicago", "Houston", "Miami"],
-  // Usar nombres sin acentos para maximizar compatibilidad con geocoding
-  BR: ["Recife", "Rio de Janeiro", "Belem", "Salvador", "Porto Alegre"],
-  CO: ["Bogota", "Pereira", "Cali", "Barranquilla", "Cartagena"],
-};
-
 @injectable()
 export class WeatherRepositoryImpl implements WeatherRepository {
   constructor(
@@ -88,13 +78,32 @@ export class WeatherRepositoryImpl implements WeatherRepository {
     private readonly apiClient: WeatherAPIClient,
 
     @inject('Logger')
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+
+    @inject('CacheService')
+    private readonly cacheService: CacheService
+  ) { }
 
   /**
    * Obtiene el clima actual para una ciudad específica
    */
   async getByCity(params: WeatherQueryParams): Promise<WeatherResult> {
+    const cacheKey = `weather:city:${params.city.name}:${params.city.country}:${params.units}`;
+
+    try {
+      // Intentar obtener del caché
+      const cached = await this.cacheService.get<WeatherResult>(cacheKey);
+      if (cached) {
+        this.logger.debug(`Cache hit para ${params.city.toString()}`);
+        // Restaurar prototipos si es necesario (al serializar/deserializar se pierden métodos)
+        // Por simplicidad en memoria, asumimos que se mantiene el objeto,
+        // pero en un caché real (Redis) habría que re-hidratar las entidades.
+        return cached;
+      }
+    } catch (error) {
+      this.logger.warn('Error al leer del caché', { error: String(error) });
+    }
+
     this.logger.info(
       `Obteniendo clima para ciudad: ${params.city.toString()}`
     );
@@ -116,6 +125,13 @@ export class WeatherRepositoryImpl implements WeatherRepository {
         city,
         requestedAt: new Date()
       };
+
+      // Guardar en caché (TTL 10 minutos por defecto)
+      try {
+        await this.cacheService.set(cacheKey, result);
+      } catch (error) {
+        this.logger.warn('Error al guardar en caché', { error: String(error) });
+      }
 
       this.logger.info(
         `Clima obtenido exitosamente para ${city.toString()}`
@@ -181,33 +197,73 @@ export class WeatherRepositoryImpl implements WeatherRepository {
 
   /**
    * Obtiene el clima para múltiples ciudades en un país
+   * Usa búsqueda dinámica, con fallback a lista predefinida
    */
   async getByCountry(
     countryCode: string,
     limit?: number
   ): Promise<WeatherResult[]> {
     const upperCountry = countryCode.toUpperCase();
-    const candidateCities = TOP_CITIES_BY_COUNTRY[upperCountry] ?? [];
-    if (candidateCities.length === 0) {
-      this.logger.warn(
-        `No hay ciudades preconfiguradas para el país ${upperCountry}. Devueltos 0 resultados.`,
-      );
-      return [];
-    }
-
-    const max = limit && limit > 0 ? Math.min(limit, candidateCities.length) : candidateCities.length;
-    const citiesToQuery = candidateCities.slice(0, max);
+    const maxCities = limit && limit > 0 ? limit : 5;
 
     this.logger.info(
-      `Obteniendo clima para ${citiesToQuery.length} ciudades en país: ${upperCountry}`
+      `Obteniendo clima para ${maxCities} ciudades en país: ${upperCountry}`
     );
 
+    // Usar la lista de ciudades predefinidas como fuente
+    // Esto garantiza ciudades conocidas y relevantes
+    const predefinedCities = getCitiesForCountry(upperCountry);
+    
+    if (predefinedCities && predefinedCities.length > 0) {
+      // Usar ciudades predefinidas para países conocidos
+      const citiesToQuery = predefinedCities.slice(0, maxCities);
+      return this.getWeatherForCities(citiesToQuery, upperCountry);
+    }
+
+    // Para países sin lista predefinida, intentar búsqueda dinámica
+    this.logger.info(
+      `País ${upperCountry} no tiene ciudades predefinidas, intentando búsqueda dinámica...`
+    );
+
+    try {
+      // Intentar obtener ciudades dinámicamente del cliente API
+      const apiResults = await this.apiClient.getCitiesByCountry(upperCountry, maxCities);
+      
+      if (apiResults && apiResults.length > 0) {
+        return apiResults.map(apiResponse => ({
+          weather: this.mapAPIToWeather(apiResponse),
+          city: this.mapAPIToCity(apiResponse),
+          requestedAt: new Date(),
+        }));
+      }
+    } catch (error) {
+      this.logger.warn(
+        `Búsqueda dinámica falló para ${upperCountry}, el país podría no existir o no tener datos disponibles`,
+        { error: String(error) }
+      );
+    }
+
+    // Si todo falla, devolver array vacío con mensaje informativo
+    this.logger.warn(
+      `No se encontraron ciudades para el país ${upperCountry}. ` +
+      `Intenta con el código ISO-2 del país (ej: ES, US, FR, DE, JP, etc.)`
+    );
+    return [];
+  }
+
+  /**
+   * Obtiene el clima para una lista de ciudades en un país
+   */
+  private async getWeatherForCities(
+    cities: string[],
+    countryCode: string
+  ): Promise<WeatherResult[]> {
     const results: WeatherResult[] = [];
 
-    for (const cityName of citiesToQuery) {
+    for (const cityName of cities) {
       const result = await this.tryGetWeatherForCityInCountry(
         cityName,
-        upperCountry,
+        countryCode,
         undefined,
       );
 
@@ -217,13 +273,10 @@ export class WeatherRepositoryImpl implements WeatherRepository {
     }
 
     this.logger.info(
-      `Obtenidos ${results.length} registros de clima para el país ${upperCountry}`
+      `Obtenidos ${results.length} registros de clima para el país ${countryCode}`
     );
 
     return results;
-
-    // Manejo de errores de alto nivel
-    // (si fallara algo inesperado antes del bucle)
   }
 
   private async tryGetWeatherForCityInCountry(
@@ -294,7 +347,7 @@ export class WeatherRepositoryImpl implements WeatherRepository {
       // Obtener la condición principal del clima
       const primaryWeather = weatherArray[0]!;
       const condition = API_CONDITION_TO_DOMAIN[primaryWeather.main] ||
-                       WeatherCondition.CLEAR;
+        WeatherCondition.CLEAR;
 
       // Crear la entidad Weather
       // Nota: Asumimos que la API devuelve temperaturas en Kelvin por defecto
@@ -335,17 +388,13 @@ export class WeatherRepositoryImpl implements WeatherRepository {
       const lat = apiResponse.coord?.lat ?? 0;
       const lon = apiResponse.coord?.lon ?? 0;
 
+      this.logger.debug(`Mapeando ciudad: name=${name}, country=${country}, lat=${lat}, lon=${lon}`);
+
       return new City(name, country, lat, lon);
     } catch (error) {
-      if (error instanceof Error) {
-        this.logger.error('Error al mapear respuesta API a City:', error);
-      } else {
-        this.logger.error('Error al mapear respuesta API a City:', {
-          name: 'UnknownError',
-          message: String(error),
-        });
-      }
-      throw new Error('Formato de respuesta de API inválido');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Error al mapear respuesta API a City: ${errorMessage} | name=${apiResponse.name}, country=${apiResponse.sys?.country}`);
+      throw new Error(`Formato de respuesta de API inválido: ${errorMessage}`);
     }
   }
 

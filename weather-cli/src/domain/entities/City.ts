@@ -55,7 +55,9 @@ export class City {
         "El nombre de la ciudad debe tener al menos 2 caracteres",
       );
     }
-    if (!/^[a-zA-Z\s\-']+$/.test(name)) {
+    // Permitir letras Unicode (incluyendo acentos, ñ, etc.), espacios, guiones, apóstrofes y comas
+    // \p{L} coincide con cualquier letra Unicode
+    if (!/^[\p{L}\s\-'\.,]+$/u.test(name)) {
       throw new Error("El nombre de la ciudad contiene caracteres inválidos");
     }
   }

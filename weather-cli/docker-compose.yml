@@ -1,0 +1,16 @@
+version: '4.49.0'
+
+
+services:
+  mongo-db:
+    image: mongo:7.0
+    container_name: weather-cli-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: jefersonmurillodev
+      MONGO_INITDB_ROOT_PASSWORD: 123456
+      MONGO_INITDB_DATABASE: WEATHER-CLI
+    volumes:
+      - ./mongo:/data/db
+    ports:
+      - "27017:27017"
