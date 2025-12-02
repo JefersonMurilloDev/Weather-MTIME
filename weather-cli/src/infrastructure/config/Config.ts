@@ -196,17 +196,29 @@ export class AppConfig {
    * Construye la URI de MongoDB desde variables de entorno
    */
   private buildMongoUri(): string {
-    const url = process.env["MONGO_URL"];
-    if (url) return url;
+    const dbName = process.env["MONGO_DB_NAME"] || 'weathercli';
+    const baseUrl = process.env["MONGO_URL"];
+    
+    // Si hay MONGO_URL, agregar el nombre de la base de datos si no está incluido
+    if (baseUrl) {
+      // Verificar si la URL ya tiene una base de datos (después del puerto)
+      const urlWithoutAuth = baseUrl.replace(/\/\/[^@]+@/, '//');
+      const hasDbName = /:\d+\/[^?]+/.test(urlWithoutAuth);
+      
+      if (hasDbName) {
+        return baseUrl; // Ya tiene nombre de BD
+      }
+      // Agregar nombre de BD y authSource
+      return `${baseUrl}/${dbName}?authSource=admin`;
+    }
 
     const user = process.env["MONGO_USER"];
     const pass = process.env["MONGO_PASS"];
     const host = process.env["MONGO_HOST"] || 'localhost';
     const port = process.env["MONGO_PORT"] || '27017';
-    const dbName = process.env["MONGO_DB_NAME"] || 'weathercli';
 
     if (user && pass) {
-      return `mongodb://${user}:${pass}@${host}:${port}/${dbName}`;
+      return `mongodb://${user}:${pass}@${host}:${port}/${dbName}?authSource=admin`;
     }
     return `mongodb://${host}:${port}/${dbName}`;
   }

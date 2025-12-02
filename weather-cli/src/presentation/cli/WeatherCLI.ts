@@ -5,6 +5,7 @@
 import { Command } from "commander";
 import * as fs from "fs";
 import * as path from "path";
+import mongoose from "mongoose";
 import { createWeatherCommand } from "./commands/weather-command";
 import { createCountryCommand } from "./commands/country-command";
 import { createConfigCommand } from "./commands/config-command";
@@ -12,6 +13,21 @@ import { createHistoryCommand } from "./commands/history-command";
 import { logger } from "@infrastructure/logger/Logger";
 import { appConfig } from "@infrastructure/config/Config";
 import { colors, icons } from "./colors";
+
+/**
+ * Cierra las conexiones abiertas (MongoDB) antes de terminar
+ */
+async function gracefulShutdown(exitCode: number = 0): Promise<void> {
+  try {
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.disconnect();
+      logger.debug('MongoDB desconectado correctamente');
+    }
+  } catch {
+    // Ignorar errores al desconectar
+  }
+  process.exit(exitCode);
+}
 
 /**
  * Interfaz para manejo de errores global
@@ -165,12 +181,19 @@ export async function runCLI(): Promise<void> {
       handleGlobalError(error as Error);
     });
 
+    // Configurar graceful shutdown para señales del sistema
+    process.on("SIGINT", () => gracefulShutdown(0));
+    process.on("SIGTERM", () => gracefulShutdown(0));
+
     // Crear CLI
     const program = createCLI();
     setupCommands(program);
 
     // Parsear argumentos
     await program.parseAsync(process.argv);
+
+    // Cerrar conexiones al terminar exitosamente
+    await gracefulShutdown(0);
   } catch (error) {
     handleGlobalError(error as Error);
   }

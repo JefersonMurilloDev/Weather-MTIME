@@ -216,22 +216,20 @@ export function createWeatherCommand(): Command {
           // Éxito - Mostrar resultado
           const weatherData = result.value.weather;
 
-          // Registrar en historial (fire-and-forget para no bloquear)
+          // Registrar en historial
           const historyService = getHistoryService();
           if (historyService) {
-            // Usar MongoDB - no esperamos la respuesta
-            setImmediate(() => {
-              historyService.save({
-                searchQuery: location,
-                cityName: result.value.city.name,
-                countryCode: result.value.city.country,
-                temperature: weatherData.temperature,
-                feelsLike: weatherData.feelsLike,
-                humidity: weatherData.humidity,
-                condition: weatherData.condition,
-                description: weatherData.description,
-              }).catch((err) => logger.debug('Error guardando en MongoDB:', err));
-            });
+            // Usar MongoDB - esperamos a que termine para evitar cierre prematuro
+            await historyService.save({
+              searchQuery: location,
+              cityName: result.value.city.name,
+              countryCode: result.value.city.country,
+              temperature: weatherData.temperature,
+              feelsLike: weatherData.feelsLike,
+              humidity: weatherData.humidity,
+              condition: weatherData.condition,
+              description: weatherData.description,
+            }).catch((err) => logger.debug('Error guardando en MongoDB:', err));
           } else {
             // Fallback a archivo local
             historyManager.logSearch(

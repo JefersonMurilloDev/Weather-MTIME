@@ -119,10 +119,22 @@ const CITIES_BY_COUNTRY: Record<string, string[]> = {
 };
 
 /**
+ * Lista de todos los códigos de países disponibles
+ */
+export const COUNTRY_CODES: string[] = Object.keys(CITIES_BY_COUNTRY);
+
+/**
  * Obtiene las ciudades de un país por su código ISO-2
  * @param countryCode - Código ISO-2 del país (ej: "ES", "US")
  * @returns Array de nombres de ciudades o undefined si no existe
  */
 export function getCitiesForCountry(countryCode: string): string[] | undefined {
   return CITIES_BY_COUNTRY[countryCode.toUpperCase()];
+}
+
+/**
+ * Obtiene todos los datos de ciudades por país (para seed)
+ */
+export function getAllCitiesByCountry(): Record<string, string[]> {
+  return { ...CITIES_BY_COUNTRY };
 }

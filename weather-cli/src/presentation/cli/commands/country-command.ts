@@ -148,23 +148,22 @@ export function createCountryCommand(): Command {
           console.log(formatter.format(result.value));
           console.log(successMessage('✅ Datos obtenidos exitosamente'));
 
-          // Guardar en historial (fire-and-forget)
+          // Guardar en historial - esperamos a que termine
           const historyService = getHistoryService();
           if (historyService) {
-            result.value.cities.forEach((cityWeather: any) => {
-              setImmediate(() => {
-                historyService.save({
-                  searchQuery: `${country} (país)`,
-                  cityName: cityWeather.city,
-                  countryCode: cityWeather.country, // Usar el código ISO de cada ciudad
-                  temperature: cityWeather.temperature,
-                  feelsLike: cityWeather.feelsLike,
-                  humidity: cityWeather.humidity,
-                  condition: cityWeather.condition,
-                  description: cityWeather.description,
-                }).catch((err) => logger.debug('Error guardando historial:', err));
-              });
-            });
+            const savePromises = result.value.cities.map((cityWeather: any) =>
+              historyService.save({
+                searchQuery: `${country} (país)`,
+                cityName: cityWeather.city,
+                countryCode: cityWeather.country,
+                temperature: cityWeather.temperature,
+                feelsLike: cityWeather.feelsLike,
+                humidity: cityWeather.humidity,
+                condition: cityWeather.condition,
+                description: cityWeather.description,
+              }).catch((err) => logger.debug('Error guardando historial:', err))
+            );
+            await Promise.all(savePromises);
           }
         } else if (isErr(result)) {
           const error = result.error;

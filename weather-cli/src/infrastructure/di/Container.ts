@@ -35,8 +35,10 @@ import { WeatherCacheAdapter, WeatherCacheService } from '@infrastructure/cache/
 
 // MongoDB
 import { HistoryRepository } from '@domain/repositories/HistoryRepository';
+import { CountryCitiesRepository } from '@domain/repositories/CountryCitiesRepository';
 import { MongoConnection } from '@infrastructure/database/MongoConnection';
 import { MongoHistoryRepository } from '@infrastructure/repositories/MongoHistoryRepository';
+import { MongoCountryCitiesRepository } from '@infrastructure/repositories/MongoCountryCitiesRepository';
 import { HistoryService } from '@application/services/HistoryService';
 
 /**
@@ -115,6 +117,12 @@ export function configureContainer(): void {
     container.registerSingleton<HistoryRepository>(
       'HistoryRepository',
       MongoHistoryRepository,
+    );
+
+    // Registrar repositorio de ciudades por país
+    container.registerSingleton<CountryCitiesRepository>(
+      'CountryCitiesRepository',
+      MongoCountryCitiesRepository,
     );
 
     // Registrar servicio de historial

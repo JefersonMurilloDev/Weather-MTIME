@@ -41,7 +41,7 @@ OPENWEATHERMAP_API_KEY=tu_api_key_aqui
 
 # Opcional - MongoDB para historial persistente
 MONGO_ENABLED=true
-MONGO_URL=mongodb://jefersonmurillodev:123456@localhost:27017
+MONGO_URL=mongodb://tu_usuario:tu_password@localhost:27017
 MONGO_DB_NAME=WEATHER-CLI
 ```
 
@@ -97,14 +97,17 @@ npx tsx src/index.ts country --help
 Para habilitar el historial persistente:
 
 ```bash
-# Iniciar MongoDB
+# Configurar variables de entorno en .env primero
+# MONGO_USER, MONGO_PASS, MONGO_DB_NAME
+
+# Iniciar MongoDB (usa variables de .env)
 docker-compose up -d
 
 # Verificar que está corriendo
 docker ps
 
-# Mongo Express disponible en http://localhost:8081
-# Usuario: admin / Contraseña: admin123
+# Poblar la base de datos con ciudades
+npx tsx src/infrastructure/database/seeds/seedCountryCities.ts
 ```
 
 ## Arquitectura

@@ -23,6 +23,7 @@ import {
 } from '@shared';
 import { Logger } from '@infrastructure/logger/Logger';
 import { ApplicationError } from '@shared/errors';
+import { CountryCitiesRepository } from '@domain/repositories/CountryCitiesRepository';
 import { getCitiesForCountry } from '@infrastructure/data/CitiesByCountry';
 
 /**
@@ -73,6 +74,8 @@ const API_CONDITION_TO_DOMAIN: Record<string, WeatherCondition> = {
 
 @injectable()
 export class WeatherRepositoryImpl implements WeatherRepository {
+  private countryCitiesRepo: CountryCitiesRepository | null = null;
+
   constructor(
     @inject('WeatherAPIClient')
     private readonly apiClient: WeatherAPIClient,
@@ -82,7 +85,17 @@ export class WeatherRepositoryImpl implements WeatherRepository {
 
     @inject('CacheService')
     private readonly cacheService: CacheService
-  ) { }
+  ) {
+    // Intentar obtener el repositorio de ciudades (opcional)
+    try {
+      const { container } = require('tsyringe');
+      if (container.isRegistered('CountryCitiesRepository')) {
+        this.countryCitiesRepo = container.resolve('CountryCitiesRepository');
+      }
+    } catch {
+      // MongoDB no está habilitado, usar fallback local
+    }
+  }
 
   /**
    * Obtiene el clima actual para una ciudad específica
@@ -210,13 +223,30 @@ export class WeatherRepositoryImpl implements WeatherRepository {
       `Obteniendo clima para ${maxCities} ciudades en país: ${upperCountry}`
     );
 
-    // Usar la lista de ciudades predefinidas como fuente
-    // Esto garantiza ciudades conocidas y relevantes
-    const predefinedCities = getCitiesForCountry(upperCountry);
+    // Intentar obtener ciudades desde MongoDB primero
+    let cities: string[] | undefined;
     
-    if (predefinedCities && predefinedCities.length > 0) {
-      // Usar ciudades predefinidas para países conocidos
-      const citiesToQuery = predefinedCities.slice(0, maxCities);
+    if (this.countryCitiesRepo) {
+      try {
+        cities = await this.countryCitiesRepo.getCitiesByCountry(upperCountry);
+        if (cities && cities.length > 0) {
+          this.logger.debug(`Ciudades obtenidas de MongoDB para ${upperCountry}`);
+        }
+      } catch (error) {
+        this.logger.warn(`Error obteniendo ciudades de MongoDB: ${error}`);
+      }
+    }
+
+    // Fallback al archivo local si no hay datos en MongoDB
+    if (!cities || cities.length === 0) {
+      cities = getCitiesForCountry(upperCountry);
+      if (cities && cities.length > 0) {
+        this.logger.debug(`Ciudades obtenidas del archivo local para ${upperCountry}`);
+      }
+    }
+    
+    if (cities && cities.length > 0) {
+      const citiesToQuery = cities.slice(0, maxCities);
       return this.getWeatherForCities(citiesToQuery, upperCountry);
     }
 

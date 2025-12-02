@@ -1,5 +1,4 @@
-version: '4.49.0'
-
+version: '3.8'
 
 services:
   mongo-db:
@@ -7,9 +6,9 @@ services:
     container_name: weather-cli-mongodb
     restart: unless-stopped
     environment:
-      MONGO_INITDB_ROOT_USERNAME: jefersonmurillodev
-      MONGO_INITDB_ROOT_PASSWORD: 123456
-      MONGO_INITDB_DATABASE: WEATHER-CLI
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS:-MONGO_PASS}
+      MONGO_INITDB_DATABASE: ${MONGO_DB_NAME:-MONGO_DB_NAME}
     volumes:
       - ./mongo:/data/db
     ports:
