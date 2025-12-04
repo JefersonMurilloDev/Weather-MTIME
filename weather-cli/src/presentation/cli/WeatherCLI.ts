@@ -10,6 +10,7 @@ import { createWeatherCommand } from "./commands/weather-command";
 import { createCountryCommand } from "./commands/country-command";
 import { createConfigCommand } from "./commands/config-command";
 import { createHistoryCommand } from "./commands/history-command";
+import { createFavoritesCommand } from "./commands/favorites-command";
 import { logger } from "@infrastructure/logger/Logger";
 import { appConfig } from "@infrastructure/config/Config";
 import { colors, icons } from "./colors";
@@ -168,6 +169,9 @@ export function setupCommands(program: Command): void {
 
   // Comando: history
   program.addCommand(createHistoryCommand());
+
+  // Comando: favorites
+  program.addCommand(createFavoritesCommand());
 }
 
 /**

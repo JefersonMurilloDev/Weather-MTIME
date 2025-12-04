@@ -123,10 +123,12 @@ export class WeatherRepositoryImpl implements WeatherRepository {
 
     try {
       // Llamar a la API externa
+      // IMPORTANTE: Siempre pedimos Kelvin (standard) a la API para que la entidad Weather
+      // pueda realizar las conversiones correctamente. Ignoramos params.units aquí.
       const apiResponse = await this.apiClient.getCurrentWeatherByCityName(
         params.city.name,
         params.city.country,
-        params.units ? UNIT_TO_API_PARAM[params.units] : undefined
+        undefined // Siempre standard (Kelvin)
       );
 
       // Mapear respuesta de API a entidades del dominio
@@ -182,7 +184,7 @@ export class WeatherRepositoryImpl implements WeatherRepository {
       const apiResponse = await this.apiClient.getCurrentWeatherByCoordinates(
         coordinates.latitude,
         coordinates.longitude,
-        units ? UNIT_TO_API_PARAM[units] : undefined
+        undefined // Siempre standard (Kelvin)
       );
 
       const weather = this.mapAPIToWeather(apiResponse);
@@ -323,7 +325,7 @@ export class WeatherRepositoryImpl implements WeatherRepository {
           const apiResponse = await this.apiClient.getCurrentWeatherByCityName(
             name,
             country,
-            unitsParam,
+            undefined, // Siempre Kelvin
           );
 
           return {

@@ -107,7 +107,7 @@ export class OpenWeatherMapClient {
         params: {
           lat,
           lon,
-          units: units || "metric",
+          units: units || "standard", // Usar Kelvin por defecto si no se especifica
           mode: "json",
         },
       }),

@@ -10,6 +10,10 @@ import { WeatherRepository } from '@domain/repositories/WeatherRepository';
 import { WeatherRepositoryImpl } from '@infrastructure/repositories/WeatherRepositoryImpl';
 import { GetWeatherByCityUseCase } from '@application/use-cases/GetWeatherByCityUseCase';
 import { GetWeatherByCountryUseCase } from '@application/use-cases/GetWeatherByCountryUseCase';
+import { AddFavoriteUseCase } from '@application/use-cases/AddFavoriteUseCase';
+import { ListFavoritesUseCase } from '@application/use-cases/ListFavoritesUseCase';
+import { RemoveFavoriteUseCase } from '@application/use-cases/RemoveFavoriteUseCase';
+import { GetWeatherForFavoritesUseCase } from '@application/use-cases/GetWeatherForFavoritesUseCase';
 // Cliente OpenWeatherMap
 import { OpenWeatherMapClient } from '@infrastructure/api/OpenWeatherMapClient';
 // Cliente basado en Open-Meteo (sin API key)
@@ -36,9 +40,11 @@ import { WeatherCacheAdapter, WeatherCacheService } from '@infrastructure/cache/
 // MongoDB
 import { HistoryRepository } from '@domain/repositories/HistoryRepository';
 import { CountryCitiesRepository } from '@domain/repositories/CountryCitiesRepository';
+import { FavoriteRepository } from '@domain/repositories/FavoriteRepository';
 import { MongoConnection } from '@infrastructure/database/MongoConnection';
 import { MongoHistoryRepository } from '@infrastructure/repositories/MongoHistoryRepository';
 import { MongoCountryCitiesRepository } from '@infrastructure/repositories/MongoCountryCitiesRepository';
+import { MongoFavoriteRepository } from '@infrastructure/repositories/MongoFavoriteRepository';
 import { HistoryService } from '@application/services/HistoryService';
 
 /**
@@ -131,6 +137,12 @@ export function configureContainer(): void {
       HistoryService,
     );
 
+    // Registrar repositorio de favoritos
+    container.registerSingleton<FavoriteRepository>(
+      'FavoriteRepository',
+      MongoFavoriteRepository,
+    );
+
     // Pre-conectar a MongoDB en background (no bloquea)
     mongoConnection.connect().catch((err) => {
       logger.warn('No se pudo pre-conectar a MongoDB:', err);
@@ -144,6 +156,11 @@ export function configureContainer(): void {
   // 8. Registrar Casos de Uso (constructor injection con @inject)
   container.registerSingleton(GetWeatherByCityUseCase, GetWeatherByCityUseCase);
   container.registerSingleton(GetWeatherByCountryUseCase, GetWeatherByCountryUseCase);
+  
+  container.registerSingleton(AddFavoriteUseCase, AddFavoriteUseCase);
+  container.registerSingleton(ListFavoritesUseCase, ListFavoritesUseCase);
+  container.registerSingleton(RemoveFavoriteUseCase, RemoveFavoriteUseCase);
+  container.registerSingleton(GetWeatherForFavoritesUseCase, GetWeatherForFavoritesUseCase);
 
   logger.debug('✅ Contenedor de dependencias configurado');
 }
