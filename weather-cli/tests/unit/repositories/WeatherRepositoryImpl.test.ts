@@ -76,7 +76,7 @@ describe('WeatherRepositoryImpl', () => {
         expect(result).toBeDefined();
         expect(result.city.name).toBe('Madrid');
         expect(result.weather.temperature).toBe(293.15);
-        expect(mockApiClient.getCurrentWeatherByCityName).toHaveBeenCalledWith('Madrid', 'ES', 'metric');
+        expect(mockApiClient.getCurrentWeatherByCityName).toHaveBeenCalledWith('Madrid', 'ES', undefined);
     });
 
     it('should throw error when API call fails', async () => {
